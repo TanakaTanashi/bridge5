@@ -3,23 +3,27 @@ from web3.middleware import ExtraDataToPOAMiddleware
 from eth_account import Account
 import json, sys
 from web3.exceptions import Web3RPCError
+import time
 
-def _get_recent_logs_per_block(event, w3, last_n=5):
+def _get_recent_logs_per_block(event, w3, last_n=30):
     latest = w3.eth.block_number
     logs = []
     start = max(0, latest - (last_n - 1))
     for bn in range(start, latest + 1):
-        try:
-            logs.extend(event.get_logs(from_block=bn, to_block=bn))
-        except Web3RPCError as e:
-            if "limit exceeded" in str(e):
-                blk = w3.eth.get_block(bn)
-                try:
-                    logs.extend(event.get_logs(block_hash=blk.hash))
-                except Exception:
-                    pass
-            else:
-                raise
+
+        for _ in range(3):
+            try:
+                logs.extend(event.get_logs(from_block=bn, to_block=bn))
+                break
+            except Web3RPCError as e:
+
+                time.sleep(0.25)
+                continue
+            except Exception:
+
+                time.sleep(0.15)
+                continue
+        time.sleep(0.1)
     return logs
 
 AVAX_RPC = "https://api.avax-test.network/ext/bc/C/rpc"
@@ -86,7 +90,7 @@ def scan_blocks(chain: str, contract_info="contract_info.json"):
 
     if chain == "source":
         start = max(0, src_w3.eth.block_number - 5)
-        logs = _get_recent_logs_per_block(src.events.Deposit(), src_w3, last_n=5)
+        logs = _get_recent_logs_per_block(src.events.Deposit(), src_w3, last_n=30)
         if not logs:
             print("No Deposit events found."); return 0
         for e in logs:
@@ -97,7 +101,7 @@ def scan_blocks(chain: str, contract_info="contract_info.json"):
 
     if chain == "destination":
         start = max(0, dst_w3.eth.block_number - 5)
-        logs = _get_recent_logs_per_block(dst.events.Unwrap(), dst_w3, last_n=5)
+        logs = _get_recent_logs_per_block(dst.events.Unwrap(), dst_w3, last_n=30)
         if not logs:
             print("No Unwrap events found."); return 0
         for e in logs:
