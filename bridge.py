@@ -5,7 +5,7 @@ import json, sys
 from web3.exceptions import Web3RPCError
 import time
 
-def _get_recent_logs_per_block(event, w3, last_n=60):
+def _get_recent_logs_per_block(event, w3, last_n=90):
     latest = w3.eth.block_number
     logs = []
     start = max(0, latest - (last_n - 1))
@@ -13,17 +13,28 @@ def _get_recent_logs_per_block(event, w3, last_n=60):
         for _ in range(3):
             try:
                 blk = w3.eth.get_block(bn)
-                # 用 block_hash 精确筛选，规避 range 限制
                 logs.extend(event.get_logs(block_hash=blk.hash))
                 break
             except Web3RPCError:
-                time.sleep(0.25)
-                continue
+                time.sleep(0.25); continue
             except Exception:
-                time.sleep(0.15)
-                continue
+                time.sleep(0.15); continue
         time.sleep(0.05)
     return logs
+
+def _get_recent_logs_bulk(event, w3, window=240):
+    latest = w3.eth.block_number
+    start = max(0, latest - (window - 1))
+    try:
+        flt = event.create_filter(from_block=start, to_block="latest")
+    except TypeError:
+        flt = event.create_filter(fromBlock=start, toBlock="latest")
+    try:
+        return flt.get_all_entries()
+    except Web3RPCError as e:
+        if "limit exceeded" in str(e) or "timeout" in str(e):
+            return _get_recent_logs_per_block(event, w3, last_n=min(window, 120))
+        raise
 
 AVAX_RPC = "https://api.avax-test.network/ext/bc/C/rpc"
 BSC_RPC  = "https://data-seed-prebsc-1-s1.binance.org:8545/"
@@ -89,7 +100,7 @@ def scan_blocks(chain: str, contract_info="contract_info.json"):
 
     if chain == "source":
         start = max(0, src_w3.eth.block_number - 5)
-        logs = _get_recent_logs_per_block(src.events.Deposit(), src_w3, last_n=60)
+        logs = _get_recent_logs_bulk(src.events.Deposit(), src_w3, window=240)
         if not logs:
             print("No Deposit events found."); return 0
         for e in logs:
@@ -100,7 +111,7 @@ def scan_blocks(chain: str, contract_info="contract_info.json"):
 
     if chain == "destination":
         start = max(0, dst_w3.eth.block_number - 5)
-        logs = _get_recent_logs_per_block(dst.events.Unwrap(), dst_w3, last_n=60)
+        logs = _get_recent_logs_bulk(dst.events.Unwrap(), dst_w3, window=240)
         if not logs:
             print("No Unwrap events found."); return 0
         for e in logs:
