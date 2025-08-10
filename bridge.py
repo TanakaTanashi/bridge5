@@ -61,8 +61,11 @@ def _sign_and_send(w3: Web3, tx: dict, pk: str):
         tx.setdefault("gas", int(w3.eth.estimate_gas(tx) * 1.2))
     except Exception:
         tx.setdefault("gas", 300000)
+
     signed = w3.eth.account.sign_transaction(tx, pk)
-    h = w3.eth.send_raw_transaction(signed.rawTransaction)
+    raw = getattr(signed, "rawTransaction", None) or getattr(signed, "raw_transaction", None)
+    h = w3.eth.send_raw_transaction(raw)
+
     print("tx:", h.hex())
     w3.eth.wait_for_transaction_receipt(h, timeout=45)
     return h
