@@ -45,7 +45,7 @@ def _is_eip1559(w3: Web3) -> bool:
 
 def _sign_and_send(w3: Web3, tx: dict, pk: str):
     acct = Account.from_key(pk)
-    tx.setdefault("nonce", w3.eth.get_transaction_count(acct.address))
+    tx.setdefault("nonce", w3.eth.get_transaction_count(acct.address, "pending"))
     tx.setdefault("chainId", w3.eth.chain_id)
     if _is_eip1559(w3):
         base = w3.eth.gas_price
